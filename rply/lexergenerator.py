@@ -1,4 +1,5 @@
 import re
+from collections import defaultdict
 
 try:
     import rpython
@@ -21,9 +22,10 @@ from rply.lexer import Lexer
 
 
 class Rule(object):
-    def __init__(self, name, pattern):
+    def __init__(self, name, pattern, to_state=None):
         self.name = name
         self.re = re.compile(pattern)
+        self.to_state = to_state
 
     def _freeze_(self):
         return True
@@ -71,23 +73,27 @@ class LexerGenerator(object):
     StopIteration
     """
 
-    def __init__(self):
-        self.rules = []
-        self.ignore_rules = []
+    def __init__(self, initial_state="initial"):
+        self.initial_state = initial_state
+        self.rules = defaultdict(list)
+        self.ignore_rules = defaultdict(list)
 
-    def add(self, name, pattern):
+    def _get_state(self, state):
+        return state or self.initial_state
+
+    def add(self, name, pattern, state=None, to_state=None):
         """
         Adds a rule with the given `name` and `pattern`. In case of ambiguity,
         the first rule added wins.
         """
-        self.rules.append(Rule(name, pattern))
+        self.rules[self._get_state(state)].append(Rule(name, pattern, to_state))
 
-    def ignore(self, pattern):
+    def ignore(self, pattern, state=None):
         """
         Adds a rule whose matched value will be ignored. Ignored rules will be
         matched before regular ones.
         """
-        self.ignore_rules.append(Rule("", pattern))
+        self.ignore_rules[self._get_state(state)].append(Rule("", pattern))
 
     def build(self):
         """
@@ -95,7 +101,7 @@ class LexerGenerator(object):
         called with a string and returns an iterator yielding
         :class:`~rply.Token` instances.
         """
-        return Lexer(self.rules, self.ignore_rules)
+        return Lexer(self.rules, self.ignore_rules, self.initial_state)
 
 if rpython:
     class RuleEntry(ExtRegistryEntry):

@@ -3,17 +3,20 @@ from rply.token import SourcePosition, Token
 
 
 class Lexer(object):
-    def __init__(self, rules, ignore_rules):
+    def __init__(self, rules, ignore_rules, initial_state="initial"):
         self.rules = rules
         self.ignore_rules = ignore_rules
+        self.initial_state = initial_state
 
     def lex(self, s):
         return LexerStream(self, s)
 
 
 class LexerStream(object):
+
     def __init__(self, lexer, s):
         self.lexer = lexer
+        self.state = lexer.initial_state
         self.s = s
         self.idx = 0
 
@@ -34,19 +37,22 @@ class LexerStream(object):
     def next(self):
         if self.idx >= len(self.s):
             raise StopIteration
-        for rule in self.lexer.ignore_rules:
+        for rule in self.lexer.ignore_rules[self.state]:
             match = rule.matches(self.s, self.idx)
             if match:
                 self._update_pos(match)
                 return self.next()
-        for rule in self.lexer.rules:
+        for rule in self.lexer.rules[self.state]:
             match = rule.matches(self.s, self.idx)
             if match:
                 colno = self._update_pos(match)
                 source_pos = SourcePosition(match.start, self._lineno, colno)
                 token = Token(
-                    rule.name, self.s[match.start:match.end], source_pos
+                    rule.name, self.s[match.start:match.end], source_pos,
+                    state=self.state
                 )
+                if rule.to_state is not None:
+                    self.state = rule.to_state
                 return token
         else:
             raise LexingError(None, SourcePosition(self.idx, -1, -1))
